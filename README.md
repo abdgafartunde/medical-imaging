@@ -1,7 +1,7 @@
 # medimg — Compressed Sensing Reconstruction for Accelerated MRI and CT
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21321200.svg)](https://doi.org/10.5281/zenodo.21321200)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21321376.svg)](https://doi.org/10.5281/zenodo.21321376)
 
 A research-grade Python package for compressed sensing and model-based
 image reconstruction in accelerated MRI and sparse-view CT.  Implements
