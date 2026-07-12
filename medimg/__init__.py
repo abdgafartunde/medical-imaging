@@ -1,6 +1,6 @@
 """medimg — Compressed sensing reconstruction for accelerated MRI and CT."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from medimg.phantoms import shepp_logan, circle_phantom
 from medimg.forward import (

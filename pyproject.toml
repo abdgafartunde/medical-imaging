@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "medimg"
-version = "0.1.0"
+version = "0.1.1"
 description = "Compressed sensing reconstruction for accelerated MRI and sparse-view CT"
 readme = "README.md"
 license = {text = "MIT"}
