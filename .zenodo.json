@@ -23,7 +23,7 @@
     "related_identifiers": [
         {
             "relation": "isSupplementTo",
-            "identifier": "https://github.com/abdgafartunde/medical-imaging"
+            "identifier": "https://doi.org/10.5281/zenodo.21321200"
         }
     ]
 }
