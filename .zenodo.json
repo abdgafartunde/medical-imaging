@@ -1,0 +1,29 @@
+{
+    "title": "medimg: Compressed Sensing Reconstruction for Accelerated MRI and CT",
+    "creators": [
+        {
+            "name": "Tiamiyu, Abd'gafar Tunde",
+            "affiliation": "School of Mathematics, Jilin University, Changchun 130012, China",
+            "orcid": "0000-0003-1641-7196"
+        }
+    ],
+    "description": "A Python package for compressed sensing and model-based image reconstruction in accelerated MRI and sparse-view CT. Implements Tikhonov regularisation, total variation (Chambolle-Pock primal-dual), and wavelet-domain L1 minimisation (FISTA) with variable-density k-space under-sampling and sparse-angle parallel-beam projections.",
+    "license": "MIT",
+    "keywords": [
+        "compressed-sensing",
+        "mri-reconstruction",
+        "ct-reconstruction",
+        "inverse-problems",
+        "total-variation",
+        "wavelet-sparsity",
+        "medical-imaging",
+        "computational-imaging",
+        "regularisation"
+    ],
+    "related_identifiers": [
+        {
+            "relation": "isSupplementTo",
+            "identifier": "https://github.com/abdgafartunde/medical-imaging"
+        }
+    ]
+}

@@ -1,0 +1,333 @@
+% ===========================================================================
+%  medimg — Compressed Sensing Reconstruction for Accelerated MRI and CT
+%  Technical Note
+%  Version 0.1.0 — July 2026
+% ===========================================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% --- Packages ----------------------------------------------------------------
+\usepackage[american]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue]{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{abstract}
+
+% --- Title helpers -----------------------------------------------------------
+\newcommand{\seprule}{\vspace{4pt}\hrule\vspace{4pt}}
+
+% ===========================================================================
+\begin{document}
+
+% --- Title block -------------------------------------------------------------
+\begin{center}
+{\LARGE\bfseries medimg}\\[4pt]
+{\large Compressed Sensing Reconstruction for Accelerated MRI and CT}\\[8pt]
+{\large Abd'gafar Tunde Tiamiyu}\\[2pt]
+School of Mathematics, Jilin University, Changchun 130012, China\\[2pt]
+\texttt{abdgafartunde@yahoo.com}\\[8pt]
+Version 0.1.0 — July 2026\\[2pt]
+DOI: \texttt{10.5281/zenodo.XXXXXXX}
+\seprule
+\end{center}
+
+% --- Summary -----------------------------------------------------------------
+\begin{abstract}
+\noindent\textbf{medimg} is a research-grade Python package for compressed
+sensing and model-based image reconstruction in accelerated magnetic
+resonance imaging (MRI) and sparse-view computed tomography (CT).  It
+implements three classical variational methods — Tikhonov regularisation
+(conjugate gradient), isotropic total variation (Chambolle-Pock
+primal-dual), and wavelet-domain $\ell_1$ minimisation (FISTA) — with
+clean operator-based abstractions that work across both modalities.
+Variable-density Cartesian $k$-space under-sampling (Lustig et~al., 2007)
+and sparse-angle parallel-beam Radon projections (Sidky \& Pan, 2008)
+serve as the forward models.  The package includes two demonstration
+scripts that generate publication-quality comparison figures, and a
+suite of 41 unit tests.
+\end{abstract}
+
+% ===========================================================================
+\section{Overview}
+% ===========================================================================
+
+Accelerated acquisition in MRI and CT reduces scan time and radiation
+dose, but the resulting under-sampled data lead to an ill-posed linear
+inverse problem.  In MRI, $k$-space is sub-sampled below the Nyquist
+rate; in CT, the number of projection angles is reduced.  Compressed
+sensing (CS) theory \cite{Candes2006,Donoho2006} guarantees exact
+recovery under sparsity and incoherence assumptions, provided a suitable
+nonlinear reconstruction algorithm is employed.
+
+This technical note describes the forward models (Section~2), the
+compressed sensing principles that underpin the reconstruction
+(Section~3), the three variational methods implemented in the package
+(Section~4), and the software structure and usage (Section~5).
+
+% ===========================================================================
+\section{Forward Models}
+% ===========================================================================
+
+\subsection{MRI}
+
+The single-coil MRI measurement process is the 2-D Fourier transform
+sampled at discrete $k$-space locations.  Let $\mathcal{F}$ denote the
+unitary 2-D DFT, $M\in\{0,1\}^{n_r\times n_c}$ a binary under-sampling
+mask, and $\eta\sim\mathcal{CN}(0,\sigma^2 I)$ additive complex Gaussian
+noise.  The forward operator is
+\begin{equation}\label{eq:mri_forward}
+A_{\text{MRI}}(x)=M\odot\mathcal{F}(x),\qquad
+y=A_{\text{MRI}}(x)+\eta,
+\end{equation}
+with adjoint
+$A_{\text{MRI}}^*(y)=\operatorname{Re}\bigl(\mathcal{F}^{-1}(M\odot y)\bigr)$.
+
+The variable-density mask \cite{Lustig2007} fully samples a central
+calibration band of $n_c$ low-frequency phase-encode lines and randomly
+sub-samples higher frequencies with probability
+$P(k_y)\propto\bigl(1-(|k_y|/k_y^{\max})^2\bigr)^2$, exploiting the
+energy concentration of natural images at low spatial frequencies.
+The under-sampling ratio $R=\|M\|_0/(n_r n_c)$ controls the
+acceleration factor $1/R$.
+
+\subsection{CT}
+
+For parallel-beam geometry, the forward operator is the 2-D Radon
+transform $\mathcal{R}$.  With projection angles $\theta_j\in[0,\pi)$
+and detector coordinate~$s$,
+\begin{equation}\label{eq:ct_forward}
+A_{\text{CT}}(x)(\theta_j,s)=\mathcal{R}x(\theta_j,s)
+=\int_{-\infty}^{\infty}x(s\cos\theta_j-t\sin\theta_j,\;
+s\sin\theta_j+t\cos\theta_j)\,dt.
+\end{equation}
+The adjoint $A_{\text{CT}}^*=\mathcal{R}^*$ is the unfiltered
+back-projection (not the FBP reconstruction, which applies a ramp
+filter).  Sparse-view CT uses $N_\theta\ll N_r$ projection angles,
+making the problem under-determined.  We normalise the operator pair by
+$1/\sqrt{\pi N_\theta}$ so that $\|A\|\approx 1$, matching the MRI
+scaling and making regularisation parameters transferable across
+modalities.
+
+% ===========================================================================
+\section{Compressed Sensing Principles}
+% ===========================================================================
+
+Compressed sensing \cite{Candes2006,Donoho2006} guarantees exact or
+near-exact recovery of a sparse signal from under-sampled linear
+measurements under two conditions:
+\begin{enumerate}[label=(\arabic*)]
+\item \textbf{Sparsity.}  The image $x$ admits a sparse representation
+  in a transform domain~$\Psi$: $x=\Psi^*c$, where $c$ has few non-zero
+  entries.
+\item \textbf{Incoherence.}  The sensing basis (Fourier for MRI; pixel
+  basis for CT) and the sparsity basis (wavelet; finite differences)
+  are sufficiently incoherent.
+\end{enumerate}
+Under these conditions, the $\ell_1$-regularised problem
+\begin{equation}\label{eq:cs_objective}
+\min_x\;\frac12\|Ax-y\|_2^2+\lambda\|\Psi x\|_1
+\end{equation}
+recovers the true image with high probability when $M\gtrsim
+s\log(N/s)$ measurements are acquired, where $s$ is the sparsity
+level.
+
+% ===========================================================================
+\section{Variational Reconstruction Methods}
+% ===========================================================================
+
+\subsection{Tikhonov Regularisation ($\ell_2$)}
+
+The simplest convex regulariser penalises the $\ell_2$ energy:
+\begin{equation}\label{eq:tikhonov}
+\min_x\;\frac12\|Ax-y\|_2^2+\frac{\lambda}{2}\|x\|_2^2.
+\end{equation}
+The solution satisfies the normal equation
+$(A^*A+\lambda I)x=A^*y$, a symmetric positive-definite linear system
+solved by the conjugate gradient method.  Tikhonov regularisation
+produces smooth reconstructions; it does not promote sparsity or
+preserve edges.
+
+\subsection{Total Variation (TV)}
+
+The discrete isotropic total variation is
+\begin{equation}\label{eq:tv}
+\operatorname{TV}(x)=\|\nabla x\|_{2,1}
+=\sum_{i,j}\sqrt{(\nabla_1 x)_{i,j}^2+(\nabla_2 x)_{i,j}^2},
+\end{equation}
+where $\nabla_1,\nabla_2$ are forward finite-difference operators.
+TV penalises the $\ell_1$ norm of the gradient magnitude, promoting
+piecewise-constant reconstructions with sharp edges.
+
+The reconstruction problem
+$\min_x\frac12\|Ax-y\|_2^2+\alpha\operatorname{TV}(x)$
+is solved via the Chambolle-Pock primal-dual algorithm
+\cite{Chambolle2011}.  Defining the saddle-point formulation
+\begin{equation*}
+\min_x\max_{p:\,\|p\|_{2,\infty}\le\alpha}
+\frac12\|Ax-y\|_2^2+\langle\nabla x,p\rangle,
+\end{equation*}
+the algorithm alternates dual ascent (pointwise $\ell_2$-ball
+projection), primal descent with the adjoint of $[A;\;\nabla]$, and
+over-relaxation.  The step sizes $\tau=\sigma=0.99/\sqrt{\|A\|^2+8}$
+guarantee convergence via $\tau\sigma\|K\|^2<1$.
+
+\subsection{Wavelet-Domain $\ell_1$ Minimisation (FISTA)}
+
+Let $W$ be a sparsifying 2-D discrete wavelet transform (e.g.,
+Haar) and $W^*$ its adjoint.  The CS objective~\eqref{eq:cs_objective}
+with $\Psi=W$ is a composite convex problem solved by FISTA
+\cite{Beck2009} with optimal $O(1/k^2)$ convergence:
+\begin{align}
+\tilde{x}^k &= z^k - \tfrac{1}{L}A^*(Az^k-y), \label{eq:fista_grad}\\
+x^{k+1} &= W^*\bigl(S_{\lambda/L}(W\tilde{x}^k)\bigr), \label{eq:fista_prox}\\
+t_{k+1} &= \tfrac12\bigl(1+\sqrt{1+4t_k^2}\bigr),\qquad
+z^{k+1}=x^{k+1}+\tfrac{t_k-1}{t_{k+1}}(x^{k+1}-x^k). \label{eq:fista_mom}
+\end{align}
+Here $L=\|A\|^2$ (estimated by power iteration when not known
+analytically) and
+$S_\tau(c)=\operatorname{sign}(c)\max(|c|-\tau,0)$ is element-wise
+soft-thresholding.
+
+The Haar wavelet is used as the default sparsifying transform because
+its piecewise-constant basis functions match the structure of the
+standard Shepp-Logan phantom, yielding substantially sparser
+coefficient vectors than smoother wavelets (e.g., Daubechies-4).
+
+% ===========================================================================
+\section{Package Structure and Availability}
+% ===========================================================================
+
+The package is organised into flat modules:
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Module} & \textbf{Description} \\
+\midrule
+\texttt{medimg.forward}    & MRI (Fourier + mask) and CT (Radon) operators \\
+\texttt{medimg.reconstruct}& Tikhonov (CG), TV (Chambolle-Pock), CS (FISTA) \\
+\texttt{medimg.transforms} & Wavelet analysis/synthesis, soft-thresholding \\
+\texttt{medimg.phantoms}   & Shepp-Logan, custom circle phantoms \\
+\texttt{medimg.metrics}    & PSNR, SSIM (Wang et~al., 2004) \\
+\texttt{medimg.plotting}   & Side-by-side comparisons, error maps \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Installation}
+
+\begin{verbatim}
+git clone https://github.com/abdgafartunde/medical-imaging
+cd medical-imaging
+pip install -e ".[dev]"
+\end{verbatim}
+
+Dependencies: NumPy ($\ge1.24$), SciPy ($\ge1.10$), Matplotlib
+($\ge3.7$), scikit-image ($\ge0.20$), PyWavelets ($\ge1.4$).
+
+\subsection{Quick Start}
+
+\begin{verbatim}
+from medimg.phantoms import shepp_logan
+from medimg.forward import generate_cartesian_mask, mri_forward, mri_adjoint
+from medimg.reconstruct import cs_fista
+from medimg.transforms import wavelet_forward, wavelet_adjoint
+
+phantom = shepp_logan((256, 256))
+mask    = generate_cartesian_mask(phantom.shape, sampling_rate=0.25,
+                                  calib_lines=24, rng=42)
+A  = lambda x: mri_forward(x, mask)
+At = lambda y: mri_adjoint(y, mask)
+y  = mri_forward(phantom, mask, noise_std=0.001, rng=42)
+
+W  = lambda x: wavelet_forward(x, wavelet='haar', level=4)
+Wt = lambda c: wavelet_adjoint(c, wavelet='haar')
+x_cs = cs_fista(A, At, y, W, Wt, lambd=1e-4, shape=phantom.shape)
+\end{verbatim}
+
+\subsection{Examples and Tests}
+
+\begin{verbatim}
+python examples/01_mri_cs.py        # CS-MRI demo
+python examples/02_ct_sparse_view.py # sparse-view CT demo
+pytest tests/ -v                     # 41 unit tests
+\end{verbatim}
+
+% ===========================================================================
+\section{Image Quality Metrics}
+% ===========================================================================
+
+\textbf{PSNR} (Peak Signal-to-Noise Ratio, in dB):
+\begin{equation*}
+\operatorname{PSNR}(x,x_{\text{ref}})=
+20\log_{10}(\operatorname{range})-
+10\log_{10}\!\Bigl(\tfrac{1}{N}\|x-x_{\text{ref}}\|_2^2\Bigr).
+\end{equation*}
+
+\textbf{SSIM} (Structural Similarity) \cite{Wang2004}:
+\begin{equation*}
+\operatorname{SSIM}(x,x_{\text{ref}})=
+\frac{(2\mu_x\mu_{\text{ref}}+C_1)(2\sigma_{x,\text{ref}}+C_2)}
+{(\mu_x^2+\mu_{\text{ref}}^2+C_1)(\sigma_x^2+\sigma_{\text{ref}}^2+C_2)},
+\end{equation*}
+where $\mu,\sigma$ are local means and standard deviations over
+$11\times11$ Gaussian windows, and $C_1,C_2$ are stabilisation
+constants.
+
+% ===========================================================================
+\begin{thebibliography}{10}
+
+\bibitem{Lustig2007}
+M.~Lustig, D.~Donoho, and J.~M.~Pauly.
+\newblock Sparse MRI: the application of compressed sensing for rapid MR
+  imaging.
+\newblock \emph{Magnetic Resonance in Medicine}, 58(6):1182--1195, 2007.
+
+\bibitem{Sidky2008}
+E.~Y.~Sidky and X.~Pan.
+\newblock Image reconstruction in circular cone-beam computed tomography by
+  constrained, total-variation minimization.
+\newblock \emph{Physics in Medicine and Biology}, 53(17):4777--4807, 2008.
+
+\bibitem{Candes2006}
+E.~J.~Cand\`es, J.~Romberg, and T.~Tao.
+\newblock Robust uncertainty principles: exact signal reconstruction from
+  highly incomplete frequency information.
+\newblock \emph{IEEE Transactions on Information Theory}, 52(2):489--509,
+  2006.
+
+\bibitem{Donoho2006}
+D.~L.~Donoho.
+\newblock Compressed sensing.
+\newblock \emph{IEEE Transactions on Information Theory}, 52(4):1289--1306,
+  2006.
+
+\bibitem{Chambolle2011}
+A.~Chambolle and T.~Pock.
+\newblock A first-order primal-dual algorithm for convex problems with
+  applications to imaging.
+\newblock \emph{Journal of Mathematical Imaging and Vision},
+  40(1):120--145, 2011.
+
+\bibitem{Beck2009}
+A.~Beck and M.~Teboulle.
+\newblock A fast iterative shrinkage-thresholding algorithm for linear
+  inverse problems.
+\newblock \emph{SIAM Journal on Imaging Sciences}, 2(1):183--202, 2009.
+
+\bibitem{Wang2004}
+Z.~Wang, A.~C.~Bovik, H.~R.~Sheikh, and E.~P.~Simoncelli.
+\newblock Image quality assessment: from error visibility to structural
+  similarity.
+\newblock \emph{IEEE Transactions on Image Processing}, 13(4):600--612,
+  2004.
+
+\end{thebibliography}
+
+\end{document}
