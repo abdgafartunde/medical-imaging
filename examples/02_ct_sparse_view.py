@@ -7,16 +7,24 @@ L1 minimisation (FISTA).  Compares against filtered back-projection
 
 Usage
 -----
-    python examples/02_ct_sparse_view.py
+    python examples/02_ct_sparse_view.py            # 256x256, 45 views, about 20 s
+    python examples/02_ct_sparse_view.py --quick    # 128x128, 30 views, a few seconds
 
-The script saves a side-by-side comparison figure to ``figures/``.
+The script runs from any directory and saves a side-by-side comparison
+figure to ``figures/`` in the repository (or ``--outdir DIR``).  Gaussian
+noise of ``noise_level`` (1% by default) relative to the RMS of the
+sinogram is added, a simple stand-in for Poisson photon noise.
+Regularisation parameters were chosen by a coarse search for the best
+PSNR on this phantom.
 Edit the CONFIG dictionary below to change the number of views or
 regularisation parameters.
 """
 
+import argparse
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 
 from medimg.phantoms import shepp_logan
 from medimg.forward import ct_forward, ct_adjoint
@@ -32,12 +40,12 @@ CONFIG = {
     "image_size": 256,
     "n_angles": 45,              # sparse views (Nyquist ~ 400 for 256²)
     "angle_range": np.pi,        # [0, π) for parallel-beam
-    "noise_std": 0.0,            # no noise (CT noise is Poisson; omitted here)
+    "noise_level": 0.01,         # Gaussian noise relative to the sinogram RMS
     "seed": 42,
-    # Regularisation parameters (tuned for normalised operator, ‖A‖ ≈ 1)
-    "tikhonov_lambda": 1e-4,
-    "tv_alpha": 5e-4,
-    "cs_lambda": 5e-5,
+    # Regularisation parameters (normalised operator, ‖A‖ = 1; 1% noise)
+    "tikhonov_lambda": 3e-4,
+    "tv_alpha": 1e-3,
+    "cs_lambda": 3e-4,
     "cs_wavelet": "haar",
     "cs_level": 4,
     # Algorithm settings
@@ -46,12 +54,28 @@ CONFIG = {
     "cs_iters": 1500,
 }
 
+QUICK = {"image_size": 128, "n_angles": 30, "tv_iters": 500, "cs_iters": 500}
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--quick", action="store_true",
+                        help="128x128 image and fewer iterations")
+    parser.add_argument("--outdir", type=Path, default=REPO_ROOT / "figures",
+                        help="directory for the figure (default: figures/ in the repository)")
+    parser.add_argument("--show", action="store_true",
+                        help="also open the figure in a window")
+    return parser.parse_args()
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    cfg = CONFIG
+    args = parse_args()
+    cfg = {**CONFIG, **(QUICK if args.quick else {})}
     rng = np.random.default_rng(cfg["seed"])
     shape = (cfg["image_size"], cfg["image_size"])
 
@@ -69,8 +93,14 @@ def main():
     print("Computing sinogram ...")
     # Raw sinogram for FBP comparison (no normalisation)
     sinogram_raw = ct_forward(phantom, angles, normalize=False)
-    # Normalised sinogram for iterative methods (‖A‖ ≈ 1)
-    sinogram = ct_forward(phantom, angles, normalize=True)
+    # Normalised sinogram for iterative methods (‖A‖ = 1), with noise
+    clean = ct_forward(phantom, angles, normalize=True)
+    noise = rng.standard_normal(clean.shape)
+    sinogram = clean + cfg["noise_level"] * np.sqrt(np.mean(clean ** 2)) * noise
+    snr = 20 * np.log10(np.linalg.norm(clean) / np.linalg.norm(sinogram - clean))
+    print(f"  Noise level {cfg['noise_level']:.0%} of the sinogram RMS; SNR {snr:.1f} dB")
+    # The same noise realisation, on the raw (unnormalised) scale, for FBP
+    sinogram_raw = sinogram * (np.linalg.norm(sinogram_raw) / np.linalg.norm(clean))
     print(f"  Sinogram shape: {sinogram.shape}")
 
     # Linear operators (normalised)
@@ -135,17 +165,18 @@ def main():
 
     fig.suptitle(
         f"Sparse-view CT: {cfg['n_angles']} projection angles "
-        f"(parallel-beam, 180° coverage)",
+        f"(parallel-beam, 180° coverage), SNR {snr:.0f} dB",
         fontsize=12, y=1.01,
     )
     fig.tight_layout()
 
     # Save
-    os.makedirs("figures", exist_ok=True)
-    out_path = "figures/02_ct_sparse_view_comparison.pdf"
+    args.outdir.mkdir(parents=True, exist_ok=True)
+    out_path = args.outdir / "02_ct_sparse_view_comparison.pdf"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"\nFigure saved to {out_path}")
-    plt.show()
+    if args.show:
+        plt.show()
 
 
 if __name__ == "__main__":

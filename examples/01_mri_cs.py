@@ -6,16 +6,23 @@ minimisation (FISTA).
 
 Usage
 -----
-    python examples/01_mri_cs.py
+    python examples/01_mri_cs.py            # 256x256, a few seconds
+    python examples/01_mri_cs.py --quick    # 128x128
 
-The script saves a side-by-side comparison figure to ``figures/``.
+The script runs from any directory and saves a side-by-side comparison
+figure to ``figures/`` in the repository (or ``--outdir DIR``).  Noise is
+added at the sampled k-space locations so that the data SNR is
+``snr_db`` (30 dB by default).  Regularisation parameters were chosen by
+a coarse search for the best PSNR on this phantom.
 Edit the CONFIG dictionary below to change the acceleration factor,
 noise level, or regularisation parameters.
 """
 
+import argparse
+from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 
 from medimg.phantoms import shepp_logan
 from medimg.forward import generate_cartesian_mask, mri_forward, mri_adjoint
@@ -31,12 +38,12 @@ CONFIG = {
     "image_size": 256,
     "sampling_rate": 0.25,       # 4× acceleration
     "calib_lines": 24,           # fully-sampled central lines
-    "noise_std": 0.001,          # complex Gaussian noise in k-space
+    "snr_db": 30.0,              # SNR of the sampled k-space data
     "seed": 42,
-    # Regularisation parameters (tuned for 4× acceleration at 256²)
-    "tikhonov_lambda": 5e-4,
-    "tv_alpha": 5e-4,
-    "cs_lambda": 1e-4,
+    # Regularisation parameters (unitary FFT, ‖A‖ = 1; 4× acceleration, 30 dB)
+    "tikhonov_lambda": 1e-3,
+    "tv_alpha": 3e-3,
+    "cs_lambda": 3e-3,
     "cs_wavelet": "haar",
     "cs_level": 4,
     # Algorithm settings
@@ -45,12 +52,28 @@ CONFIG = {
     "cs_iters": 1000,
 }
 
+QUICK = {"image_size": 128, "calib_lines": 12, "tv_iters": 500, "cs_iters": 500}
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--quick", action="store_true",
+                        help="128x128 image and fewer iterations")
+    parser.add_argument("--outdir", type=Path, default=REPO_ROOT / "figures",
+                        help="directory for the figure (default: figures/ in the repository)")
+    parser.add_argument("--show", action="store_true",
+                        help="also open the figure in a window")
+    return parser.parse_args()
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main():
-    cfg = CONFIG
+    args = parse_args()
+    cfg = {**CONFIG, **(QUICK if args.quick else {})}
     rng = np.random.default_rng(cfg["seed"])
     shape = (cfg["image_size"], cfg["image_size"])
 
@@ -71,8 +94,14 @@ def main():
 
     # --- 3. Forward operator ---
     print("Applying forward operator ...")
-    kspace = mri_forward(phantom, mask, noise_std=cfg["noise_std"],
+    clean = mri_forward(phantom, mask)
+    signal_rms = np.sqrt(np.mean(np.abs(clean[mask]) ** 2))
+    noise_std = signal_rms / (np.sqrt(2.0) * 10 ** (cfg["snr_db"] / 20))
+    kspace = mri_forward(phantom, mask, noise_std=noise_std,
                          rng=int(rng.integers(0, 2**31)))
+    snr = 20 * np.log10(np.linalg.norm(clean[mask])
+                        / np.linalg.norm((kspace - clean)[mask]))
+    print(f"  Noise std {noise_std:.2e} per real/imag part; data SNR {snr:.1f} dB")
 
     # Linear operators
     A  = lambda x: mri_forward(x, mask)
@@ -132,17 +161,18 @@ def main():
     fig.suptitle(
         f"CS-MRI: {cfg['sampling_rate']:.0%} sampling "
         f"({1/cfg['sampling_rate']:.1f}× acceleration), "
-        f"σ = {cfg['noise_std']:.0e}",
+        f"data SNR {snr:.0f} dB",
         fontsize=12, y=1.01,
     )
     fig.tight_layout()
 
     # Save
-    os.makedirs("figures", exist_ok=True)
-    out_path = "figures/01_mri_cs_comparison.pdf"
+    args.outdir.mkdir(parents=True, exist_ok=True)
+    out_path = args.outdir / "01_mri_cs_comparison.pdf"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"\nFigure saved to {out_path}")
-    plt.show()
+    if args.show:
+        plt.show()
 
 
 if __name__ == "__main__":
