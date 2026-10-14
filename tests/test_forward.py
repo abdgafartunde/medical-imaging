@@ -252,3 +252,25 @@ class TestMRINoiseModel:
         full = np.ones((64, 64), dtype=bool)
         assert np.linalg.norm(mri_forward(img, full)) == pytest.approx(
             np.linalg.norm(img), rel=1e-12)
+
+
+class TestAdjointnessEdgeCases:
+    """Odd sizes and unmasked test vectors catch shift and masking errors."""
+
+    @pytest.mark.parametrize("shape", [(63, 63), (64, 50), (31, 48)])
+    def test_mri_dot_product_any_shape_unmasked_y(self, shape):
+        rng = np.random.default_rng(1)
+        mask = rng.random(shape) < 0.4
+        x = rng.standard_normal(shape)
+        y = rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
+        lhs = np.real(np.vdot(mri_forward(x, mask), y))
+        rhs = np.vdot(x, mri_adjoint(y, mask))
+        assert lhs == pytest.approx(rhs, rel=1e-12)
+
+    def test_ct_dot_product_odd_size(self):
+        rng = np.random.default_rng(2)
+        angles = np.linspace(0, np.pi, 23, endpoint=False)
+        x = rng.standard_normal((65, 65))
+        y = rng.standard_normal((23, 65))
+        assert np.vdot(ct_forward(x, angles), y) == pytest.approx(
+            np.vdot(x, ct_adjoint(y, angles)), rel=1e-12)

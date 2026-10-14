@@ -46,6 +46,12 @@ def wavelet_forward(x, wavelet='db4', level=4):
         coefficients at each level (each a 3-tuple of (LH, HL, HH)
         sub-bands).
     """
+    n_rows, n_cols = np.shape(x)
+    if n_rows % 2**level or n_cols % 2**level:
+        raise ValueError(
+            f"image shape {np.shape(x)} is not divisible by 2**level = {2**level}; "
+            "the transform would not be orthogonal (use a smaller level or pad the image)"
+        )
     return pywt.wavedec2(x, wavelet=wavelet, level=level, mode="periodization")
 
 

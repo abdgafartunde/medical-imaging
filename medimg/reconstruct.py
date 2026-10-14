@@ -91,7 +91,8 @@ def tikhonov_cg(A, At, y, lambd, shape, x0=None, max_iter=100, tol=1e-6):
     max_iter : int
         Maximum CG iterations.
     tol : float
-        Relative residual tolerance.
+        Stop when the residual of the normal equations satisfies
+        ``||A^* y - (A^* A + lambd I) x|| <= tol * ||A^* y||``.
 
     Returns
     -------
@@ -109,6 +110,10 @@ def tikhonov_cg(A, At, y, lambd, shape, x0=None, max_iter=100, tol=1e-6):
     def H(v):
         return At(A(v)) + lambd * v
 
+    b_norm = np.linalg.norm(At_y.ravel())
+    if b_norm == 0.0:  # zero data: the minimiser is x = 0
+        return np.zeros(shape, dtype=np.float64)
+
     r = At_y - H(x)
     p = r.copy()
     rs_old = np.dot(r.ravel(), r.ravel())
@@ -119,7 +124,7 @@ def tikhonov_cg(A, At, y, lambd, shape, x0=None, max_iter=100, tol=1e-6):
         x += alpha * p
         r -= alpha * Hp
         rs_new = np.dot(r.ravel(), r.ravel())
-        if np.sqrt(rs_new) < tol * np.sqrt(rs_old):
+        if np.sqrt(rs_new) <= tol * b_norm:
             break
         p = r + (rs_new / rs_old) * p
         rs_old = rs_new

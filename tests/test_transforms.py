@@ -32,3 +32,9 @@ def test_wavelet_transform_is_orthogonal(wavelet, level):
 def test_soft_threshold():
     x = np.array([-3.0, -0.5, 0.0, 0.5, 3.0])
     np.testing.assert_allclose(soft_threshold(x, 1.0), [-2.0, 0.0, 0.0, 0.0, 2.0])
+
+
+@pytest.mark.parametrize("shape, level", [((65, 65), 1), ((100, 100), 3), ((64, 48), 5)])
+def test_wavelet_rejects_sizes_not_divisible_by_2_to_level(shape, level):
+    with pytest.raises(ValueError):
+        wavelet_forward(np.zeros(shape), "haar", level)

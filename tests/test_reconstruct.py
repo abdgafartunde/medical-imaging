@@ -253,3 +253,26 @@ def test_chambolle_pock_keeps_real_data_real():
                               alpha=1e-3, shape=img.shape, max_iter=50, rng=0)
     assert np.isrealobj(x)
     assert psnr(x, img) > 20
+
+
+def test_tikhonov_cg_zero_data_returns_zero():
+    from medimg.forward import ct_adjoint, ct_forward
+
+    angles = np.linspace(0, np.pi, 10, endpoint=False)
+    x = tikhonov_cg(lambda v: ct_forward(v, angles), lambda w: ct_adjoint(w, angles),
+                    np.zeros((10, 32)), lambd=1e-3, shape=(32, 32))
+    assert np.all(x == 0.0)
+
+
+def test_tikhonov_cg_meets_its_tolerance():
+    from medimg.forward import ct_adjoint, ct_forward
+
+    img = shepp_logan((64, 64))
+    angles = np.linspace(0, np.pi, 30, endpoint=False)
+    A = lambda v: ct_forward(v, angles)  # noqa: E731
+    At = lambda w: ct_adjoint(w, angles)  # noqa: E731
+    y = A(img)
+    lam, tol = 1e-3, 1e-6
+    x = tikhonov_cg(A, At, y, lambd=lam, shape=img.shape, max_iter=500, tol=tol)
+    b = At(y)
+    assert np.linalg.norm(b - (At(A(x)) + lam * x)) <= tol * np.linalg.norm(b) * (1 + 1e-9)

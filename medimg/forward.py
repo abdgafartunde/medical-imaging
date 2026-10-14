@@ -33,18 +33,23 @@ def generate_cartesian_mask(shape, sampling_rate=0.30, calib_lines=24,
                             rng=None):
     """Generate a variable-density Cartesian k-space under-sampling mask.
 
-    Fully samples a central calibration band (low spatial frequencies)
-    and randomly sub-samples higher frequencies with probability decaying
-    as a polynomial in distance from the k-space centre.  This follows
-    the variable-density scheme of Lustig et al. (2007).
+    Fully samples a central calibration band of columns (low spatial
+    frequencies) and then samples individual k-space locations outside it
+    at random, without replacement, with a probability that decays as
+    ``(1 - d**2)**2`` in the distance ``d`` of the column from the centre.
+    This follows the variable-density scheme of Lustig et al. (2007).
+    Because points rather than whole lines are selected, the mask
+    corresponds to a 3-D Cartesian acquisition with two phase-encoding
+    directions; for single-slice 2-D MRI, sample whole lines instead.
 
     Parameters
     ----------
     shape : tuple of int
         (n_rows, n_cols) of k-space.
     sampling_rate : float
-        Approximate fraction of k-space samples to retain (excluding the
-        fully-sampled calibration region).
+        Fraction of k-space locations to sample, including the fully
+        sampled calibration band (exact up to rounding unless the band
+        alone exceeds it).
     calib_lines : int
         Number of contiguous central phase-encode lines to sample fully.
     rng : int or numpy.random.Generator, optional
