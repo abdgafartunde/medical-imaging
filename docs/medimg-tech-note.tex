@@ -1,7 +1,7 @@
 % ===========================================================================
 %  medimg — Compressed Sensing Reconstruction for Accelerated MRI and CT
 %  Technical Note
-%  Version 0.1.1 — July 2026
+%  Version 0.2.0 — October 2026
 % ===========================================================================
 
 \documentclass[11pt,a4paper]{article}
@@ -32,8 +32,8 @@
 {\large Abd'gafar Tunde Tiamiyu}\\[2pt]
 School of Mathematics, Jilin University, Changchun 130012, China\\[2pt]
 \texttt{abdgafartunde@yahoo.com}\\[8pt]
-Version 0.1.1 — July 2026\\[2pt]
-DOI: \texttt{10.5281/zenodo.21321376}
+Version 0.2.0 — October 2026\\[2pt]
+DOI: \texttt{10.5281/zenodo.21321199}
 \seprule
 \end{center}
 
@@ -50,7 +50,8 @@ Variable-density Cartesian $k$-space under-sampling (Lustig et~al., 2007)
 and sparse-angle parallel-beam Radon projections (Sidky \& Pan, 2008)
 serve as the forward models.  The package includes two demonstration
 scripts that generate publication-quality comparison figures, and a
-suite of 41 unit tests.
+suite of 56 tests, including dot-product (adjoint) tests for both
+operators and golden-output tests of the examples.
 \end{abstract}
 
 % ===========================================================================
@@ -79,11 +80,11 @@ compressed sensing principles that underpin the reconstruction
 The single-coil MRI measurement process is the 2-D Fourier transform
 sampled at discrete $k$-space locations.  Let $\mathcal{F}$ denote the
 unitary 2-D DFT, $M\in\{0,1\}^{n_r\times n_c}$ a binary under-sampling
-mask, and $\eta\sim\mathcal{CN}(0,\sigma^2 I)$ additive complex Gaussian
-noise.  The forward operator is
+mask, and $\eta$ complex Gaussian noise with independent
+$\mathcal{N}(0,\sigma^2)$ real and imaginary parts.  The forward operator is
 \begin{equation}\label{eq:mri_forward}
 A_{\text{MRI}}(x)=M\odot\mathcal{F}(x),\qquad
-y=A_{\text{MRI}}(x)+\eta,
+y=A_{\text{MRI}}(x)+M\odot\eta,
 \end{equation}
 with adjoint
 $A_{\text{MRI}}^*(y)=\operatorname{Re}\bigl(\mathcal{F}^{-1}(M\odot y)\bigr)$.
@@ -109,9 +110,11 @@ s\sin\theta_j+t\cos\theta_j)\,dt.
 The adjoint $A_{\text{CT}}^*=\mathcal{R}^*$ is the unfiltered
 back-projection (not the FBP reconstruction, which applies a ramp
 filter).  Sparse-view CT uses $N_\theta\ll N_r$ projection angles,
-making the problem under-determined.  We normalise the operator pair by
-$1/\sqrt{\pi N_\theta}$ so that $\|A\|\approx 1$, matching the MRI
-scaling and making regularisation parameters transferable across
+making the problem under-determined.  We discretise $\mathcal{R}$ as a
+sparse pixel-driven projector with linear interpolation onto the detector
+bins, so the back-projection is its exact transpose, and divide the pair by
+the largest singular value so that $\|A\|=1$, matching the unitary MRI
+operator and making regularisation parameters transferable across
 modalities.
 
 % ===========================================================================
@@ -244,19 +247,19 @@ mask    = generate_cartesian_mask(phantom.shape, sampling_rate=0.25,
                                   calib_lines=24, rng=42)
 A  = lambda x: mri_forward(x, mask)
 At = lambda y: mri_adjoint(y, mask)
-y  = mri_forward(phantom, mask, noise_std=0.001, rng=42)
+y  = mri_forward(phantom, mask, noise_std=0.01, rng=42)  # ~30 dB
 
 W  = lambda x: wavelet_forward(x, wavelet='haar', level=4)
 Wt = lambda c: wavelet_adjoint(c, wavelet='haar')
-x_cs = cs_fista(A, At, y, W, Wt, lambd=1e-4, shape=phantom.shape)
+x_cs = cs_fista(A, At, y, W, Wt, lambd=3e-3, shape=phantom.shape)
 \end{verbatim}
 
 \subsection{Examples and Tests}
 
 \begin{verbatim}
-python examples/01_mri_cs.py        # CS-MRI demo
-python examples/02_ct_sparse_view.py # sparse-view CT demo
-pytest tests/ -v                     # 41 unit tests
+python examples/01_mri_cs.py        # CS-MRI demo (add --quick for 128x128)
+python examples/02_ct_sparse_view.py # sparse-view CT demo (--quick)
+pytest                               # 56 tests
 \end{verbatim}
 
 % ===========================================================================

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "medimg"
-version = "0.1.1"
+version = "0.2.0"
 description = "Compressed sensing reconstruction for accelerated MRI and sparse-view CT"
 readme = "README.md"
 license = {text = "MIT"}
@@ -28,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Medical Science Apps",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
@@ -44,6 +45,11 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/abdgafartunde/medical-imaging"
+Documentation = "https://github.com/abdgafartunde/medical-imaging/blob/main/THEORY.md"
+DOI = "https://doi.org/10.5281/zenodo.21321199"
 
 [tool.setuptools.packages.find]
 include = ["medimg*"]

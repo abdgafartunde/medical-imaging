@@ -23,7 +23,10 @@
     "related_identifiers": [
         {
             "relation": "isSupplementTo",
-            "identifier": "https://doi.org/10.5281/zenodo.21321376"
+            "identifier": "https://github.com/abdgafartunde/medical-imaging",
+            "resource_type": "software"
         }
-    ]
+    ],
+    "version": "0.2.0",
+    "upload_type": "software"
 }

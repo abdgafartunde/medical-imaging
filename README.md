@@ -1,7 +1,8 @@
 # medimg — Compressed Sensing Reconstruction for Accelerated MRI and CT
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21321376.svg)](https://doi.org/10.5281/zenodo.21321376)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21321199.svg)](https://doi.org/10.5281/zenodo.21321199)
+[![Tests](https://github.com/abdgafartunde/medical-imaging/actions/workflows/tests.yml/badge.svg)](https://github.com/abdgafartunde/medical-imaging/actions/workflows/tests.yml)
 
 A research-grade Python package for compressed sensing and model-based
 image reconstruction in accelerated MRI and sparse-view CT.  Implements
@@ -47,8 +48,9 @@ phantom = shepp_logan((256, 256))
 mask = generate_cartesian_mask(phantom.shape, sampling_rate=0.25,
                                calib_lines=24, rng=42)
 
-# 3. Forward operator: Fourier + mask + noise
-kspace = mri_forward(phantom, mask, noise_std=0.001, rng=42)
+# 3. Forward operator: unitary Fourier + mask + noise at sampled locations
+#    (noise_std 0.01 gives a data SNR of about 30 dB for this phantom)
+kspace = mri_forward(phantom, mask, noise_std=0.01, rng=42)
 
 # 4. Define linear operators
 A  = lambda x: mri_forward(x, mask)            # forward
@@ -56,13 +58,13 @@ At = lambda y: mri_adjoint(y, mask)            # adjoint
 y  = kspace
 
 # 5. Reconstruct
-x_tik = tikhonov_cg(A, At, y, lambd=1e-4, shape=phantom.shape)
-x_tv  = tv_chambolle_pock(A, At, y, alpha=1e-3, shape=phantom.shape)
+x_tik = tikhonov_cg(A, At, y, lambd=1e-3, shape=phantom.shape)
+x_tv  = tv_chambolle_pock(A, At, y, alpha=3e-3, shape=phantom.shape)
 
 # 6. CS with wavelet sparsity
 W  = lambda x: wavelet_forward(x, wavelet='haar', level=4)
 Wt = lambda c: wavelet_adjoint(c, wavelet='haar')
-x_cs = cs_fista(A, At, y, W, Wt, lambd=1e-4, shape=phantom.shape)
+x_cs = cs_fista(A, At, y, W, Wt, lambd=3e-3, shape=phantom.shape)
 
 # 7. Compare
 plot_reconstructions(
@@ -75,20 +77,47 @@ plot_reconstructions(
 For CT sparse-view reconstruction, replace the forward/adjoint with
 `ct_forward` / `ct_adjoint` and generate sparse projection angles.
 
+Both operator pairs are exactly adjoint (the dot-product test
+$\langle Ax, y\rangle = \langle x, A^*y\rangle$ holds to rounding error) and
+have spectral norm 1, so regularisation parameters are on comparable scales.
+The MRI operator uses the unitary FFT; the CT operator is a sparse
+parallel-beam projector whose geometry matches `skimage.transform.radon`
+(`circle=True`) and whose transpose is the back-projection.
+
 ## Documentation
 
 - [THEORY.md](THEORY.md) — Full mathematical formulation (forward models,
   compressed sensing principles, Tikhonov, TV/Chambolle-Pock, FISTA).
 - [examples/01_mri_cs.py](examples/01_mri_cs.py) — MRI compressed sensing
-  with configurable acceleration factor, noise level, and regularisation.
+  with configurable acceleration factor, noise level (30 dB data SNR by
+  default), and regularisation.
 - [examples/02_ct_sparse_view.py](examples/02_ct_sparse_view.py) — CT
-  reconstruction from sparse-view projections.
+  reconstruction from 45 sparse views with 1% noise, compared with FBP.
+
+Both examples run from any directory, save their figure to `figures/` (or
+`--outdir DIR`), and accept `--quick` for a 128 × 128 run of a few seconds.
+With the default settings they report:
+
+| | Zero-filled / FBP | Tikhonov | TV | CS (wavelet) |
+|---|---|---|---|---|
+| MRI, 4× acceleration, 30 dB | 21.2 dB | 22.1 dB | 44.0 dB | 34.7 dB |
+| CT, 45 views, 1% noise | 22.9 dB | 25.3 dB | 31.9 dB | 27.7 dB |
+
+Regularisation parameters were chosen by a coarse search for the best PSNR on
+the Shepp-Logan phantom, so these numbers are best cases for this phantom.
 
 ## Running tests
 
 ```bash
-pytest tests/ -v
+pytest          # 56 tests
 ```
+
+The suite includes dot-product (adjoint) and operator-norm tests for both
+modalities, tests of the noise model, and golden-output tests that rerun the
+quick configuration of both examples and compare PSNR and SSIM with
+[`tests/golden/quick_examples.json`](tests/golden/quick_examples.json).
+GitHub Actions runs the tests on Python 3.10 to 3.13. To reproduce the tested
+environment exactly, use the lock file: `uv sync --extra dev`.
 
 ## References
 
@@ -114,5 +143,6 @@ MIT — see [LICENSE](LICENSE).
 
 ## Citation
 
-If you use this code in your research, please cite the repository via its
-Zenodo DOI and/or link to <https://github.com/abdgafartunde/medical-imaging>.
+If you use this code in your research, please cite the Zenodo archive
+([10.5281/zenodo.21321199](https://doi.org/10.5281/zenodo.21321199), which always resolves to the latest
+version); the citation metadata is in [`CITATION.cff`](CITATION.cff).

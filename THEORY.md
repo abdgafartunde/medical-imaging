@@ -15,11 +15,14 @@ The MRI measurement process in the ideal single-coil setting is the
 2-D Fourier transform sampled at discrete k-space locations.  Let
 $\mathcal{F}$ denote the unitary 2-D DFT.  With an under-sampling
 mask $M \in \{0, 1\}^{n_{\text{rows}} \times n_{\text{cols}}}$ and
-additive complex Gaussian noise $\eta \sim \mathcal{CN}(0, \sigma^2 I)$,
-the forward model is
+complex Gaussian noise $\eta$ whose real and imaginary parts are
+independent $\mathcal{N}(0, \sigma^2)$, the forward model is
 
 $$A_{\text{MRI}}(x) = M \odot \mathcal{F}(x), \qquad
-y = A_{\text{MRI}}(x) + \eta.$$
+y = A_{\text{MRI}}(x) + M \odot \eta,$$
+
+so unsampled k-space locations stay exactly zero.  Because $\mathcal{F}$
+is unitary, $\sigma$ is on the scale of the image intensities.
 
 The adjoint is the masked inverse Fourier transform:
 
@@ -50,7 +53,11 @@ $$A_{\text{CT}}(x)(\theta_j, s) = \mathcal{R}x(\theta_j, s)
 
 The adjoint $A_{\text{CT}}^* = \mathcal{R}^*$ is the unfiltered
 back-projection (not the FBP reconstruction, which applies a ramp
-filter).  For $N_\theta$ projection angles and $N_s$ detector bins,
+filter).  In `medimg`, $\mathcal{R}$ is discretised as a sparse matrix
+(pixel-driven, with linear interpolation onto unit-width detector bins)
+and the back-projection is its transpose, so the discrete pair is exactly
+adjoint.  The operator is divided by its largest singular value, so
+$\|A_{\text{CT}}\| = 1$.  For $N_\theta$ projection angles and $N_s$ detector bins,
 the sinogram has dimensions $N_\theta \times N_s$.  Sparse-view CT
 uses $N_\theta$ much smaller than the Nyquist criterion would demand,
 making the reconstruction problem under-determined.
@@ -152,7 +159,8 @@ optimal $O(1/k^2)$ convergence rate:
 The Lipschitz constant $L$ is estimated by power iteration when not
 known analytically.  For MRI, $L = 1$ exactly (the FFT is unitary
 and the mask only zeros entries).  For CT, $L$ depends on the
-number and distribution of projection angles.
+number and distribution of projection angles; with the default
+normalisation it is also $L = 1$.
 
 ## 4. Image Quality Metrics
 
