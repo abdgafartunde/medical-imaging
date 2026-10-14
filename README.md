@@ -1,4 +1,4 @@
-# medimg — Compressed Sensing Reconstruction for Accelerated MRI and CT
+# medimg: Compressed Sensing Reconstruction for Accelerated MRI and CT
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21321199.svg)](https://doi.org/10.5281/zenodo.21321199)
@@ -6,8 +6,8 @@
 
 A research-grade Python package for compressed sensing and model-based
 image reconstruction in accelerated MRI and sparse-view CT.  Implements
-classical variational methods — Tikhonov, total variation, and
-wavelet-domain L1 minimisation — with clean operator-based abstractions
+classical variational methods (Tikhonov, total variation, and
+wavelet-domain L1 minimisation) with clean operator-based abstractions
 that work across both imaging modalities.
 
 ## Sample results
@@ -66,6 +66,8 @@ At = lambda y: mri_adjoint(y, mask)            # adjoint
 y  = kspace
 
 # 5. Reconstruct
+# (the 256 x 256 example in examples/01_mri_cs.py uses 200 CG, 2000 TV, and
+#  1000 FISTA iterations; the defaults below are faster but less converged)
 x_tik = tikhonov_cg(A, At, y, lambd=1e-3, shape=phantom.shape)
 x_tv  = tv_chambolle_pock(A, At, y, alpha=3e-3, shape=phantom.shape)
 
@@ -94,18 +96,18 @@ parallel-beam projector whose geometry matches `skimage.transform.radon`
 
 ## Documentation
 
-- [docs/medimg-tech-note.pdf](docs/medimg-tech-note.pdf): the technical note.
-  The operators and algorithms as implemented, verification, results,
+- [docs/medimg-tech-note.pdf](docs/medimg-tech-note.pdf): the technical note,
+  with the operators and algorithms as implemented, verification, results,
   parameter guidance, API reference, and limitations.
 - [examples/00_getting_started.ipynb](examples/00_getting_started.ipynb): the
   tutorial, MRI and CT step by step, choosing parameters without the true
   image, your own images, and writing your own operator. Start here.
-- [THEORY.md](THEORY.md) — Full mathematical formulation (forward models,
+- [THEORY.md](THEORY.md): full mathematical formulation (forward models,
   compressed sensing principles, Tikhonov, TV/Chambolle-Pock, FISTA).
-- [examples/01_mri_cs.py](examples/01_mri_cs.py) — MRI compressed sensing
+- [examples/01_mri_cs.py](examples/01_mri_cs.py): MRI compressed sensing
   with configurable acceleration factor, noise level (30 dB data SNR by
   default), and regularisation.
-- [examples/02_ct_sparse_view.py](examples/02_ct_sparse_view.py) — CT
+- [examples/02_ct_sparse_view.py](examples/02_ct_sparse_view.py): CT
   reconstruction from 45 sparse views with 1% noise, compared with FBP.
 
 Both examples run from any directory, save their figure to `figures/` (or
@@ -123,7 +125,7 @@ the Shepp-Logan phantom, so these numbers are best cases for this phantom.
 ## Running tests
 
 ```bash
-pytest          # 56 tests
+pytest          # 69 tests
 ```
 
 The suite includes dot-product (adjoint) and operator-norm tests for both
@@ -153,7 +155,7 @@ environment exactly, use the lock file: `uv sync --extra dev`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT; see [LICENSE](LICENSE).
 
 ## Citation
 

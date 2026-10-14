@@ -115,7 +115,7 @@ comparable scales for the two modalities.
 \subsection{MRI}
 
 \paragraph{Operator.} Let $\F$ be the unitary two-dimensional discrete
-Fourier transform with the zero frequency at the centre of the array
+Fourier transform with the zero frequency at the center of the array
 (\code{fftshift(fft2(ifftshift(x), norm="ortho"))}), and
 $M\in\{0,1\}^{n_r\times n_c}$ a sampling mask. Then
 \begin{equation}\label{eq:mri}
@@ -133,7 +133,7 @@ sampling\_rate, calib\_lines, rng)} fully samples the \code{calib\_lines}
 central columns of k-space, which hold most of the energy, and then samples
 individual locations outside that band, without replacement, with a
 probability proportional to $(1-d^2)^2$, where $d$ is the distance of the
-column from the centre column relative to half the width. The total number of
+column from the center column relative to half the width. The total number of
 samples is \code{sampling\_rate} times the number of pixels, so the
 acceleration factor is $1/\code{sampling\_rate}$. Because the random part
 selects points rather than whole lines, the mask corresponds to a 3-D
@@ -158,12 +158,13 @@ as the MRI example and the tutorial do.
 transform $\R$, sampled at angles $\theta_1,\dots,\theta_{N_\theta}$ in
 $[0,\pi)$ and at $n$ unit-width detector bins for an $n\times n$ image.
 \texttt{medimg} discretizes it as a sparse matrix with a pixel-driven
-scheme: each pixel centre inside the inscribed circle is projected onto the
+scheme: each pixel center inside the inscribed circle is projected onto the
 detector, $s = x\cos\theta + y\sin\theta + \lfloor n/2\rfloor$, and its value
 is split between the two nearest bins with linear-interpolation weights.
 The geometry matches \code{skimage.transform.radon(image, circle=True)}: on
-the Shepp--Logan phantom the two sinograms differ by 1.3\% (relative), owing
-to the different interpolation. The back-projection is the matrix
+the Shepp--Logan phantom the two sinograms differ by 1.3\% (relative) at
+$128\times128$ with 60 views and by 0.4\% at $256\times256$ with 45 views,
+owing to the different interpolation. The back-projection is the matrix
 transpose, so the pair is exactly adjoint. With \code{normalize=True} (the
 default) both \code{ct\_forward} and \code{ct\_adjoint} divide by the largest
 singular value of the matrix, computed once with
@@ -175,8 +176,10 @@ eight most recent combinations of image size and angles.
 Version~0.2.0 replaced the earlier operator pair, which applied
 \code{skimage.transform.radon} and \code{iradon} with a fixed normalization:
 \code{iradon} scales the back-projection by $\pi/(2N_\theta)$, and the two
-functions are not discrete adjoints of each other, so the dot-product ratio
-was 17.6, 40.8, and 86.6 for 30, 60, and 180 angles. Likewise, the earlier
+functions are not discrete adjoints of each other. For such a pair the
+dot-product ratio depends on the test vectors; over five random draws at
+$128\times128$ it ranged from 17 to 21, 36 to 41, and 98 to 132 for 30, 60,
+and 180 angles. Likewise, the earlier
 MRI operator used the unnormalized FFT with the normalized inverse, which made
 its adjoint wrong by a factor of $n_rn_c$.
 
@@ -198,8 +201,8 @@ iterations of $A^*A$ from a random start (\code{rng} sets the seed) unless
 \end{equation}
 by conjugate gradients on the normal equations
 $(A^*A+\lambda I)x = A^*y$, stopping after \code{max\_iter} iterations or
-when the residual has fallen below \code{tol} times its value at the
-previous iteration. For MRI it barely improves on the zero-filled image: it
+when the residual of the normal equations is at most \code{tol} times
+$\|A^*y\|$ (zero data return $x=0$). For MRI it barely improves on the zero-filled image: it
 cannot recover frequencies that were not measured, apart from those fixed by
 the conjugate symmetry of a real image.
 
@@ -251,12 +254,14 @@ extension (\code{mode="periodization"}), so for an orthogonal wavelet
 (Haar, Daubechies, symlets, coiflets) and image sides divisible by
 $2^{\text{level}}$ the transform is orthogonal and
 $W^*\mathcal S_{\lambda/L}W$ is the exact proximal map of the penalty, as
-FISTA requires~\cite{DaubechiesDefriseDeMol2004}. FISTA stops when the
+FISTA requires~\cite{DaubechiesDefriseDeMol2004}; \code{wavelet\_forward}
+raises an error for other image sizes. FISTA stops when the
 relative change of the iterate falls below \code{tol}.
 
 Version~0.2.0 introduced the periodic extension. With PyWavelets' default
-symmetric extension, the db4 transform of a $128\times128$ image has 21\,904
-coefficients and is not orthogonal ($\|Wx\|/\|x\| = 1.097$), so the
+symmetric extension, the level-3 db4 transform of a $128\times128$ image has
+19\,510 coefficients and is not orthogonal ($\|Wx\|/\|x\|\approx1.10$ for a
+random image), so the
 thresholding step was only an approximation of the proximal map; the Haar
 transform was unaffected.
 
@@ -295,7 +300,9 @@ differ slightly from implementations that use a Gaussian window.
   \item \emph{Adjoints.} For random $x$ and $y$, the ratio
         $\langle Ax,y\rangle/\langle x,A^*y\rangle$ equals 1 to within
         $2\times10^{-15}$ for the MRI operator and for the CT operator with
-        30, 60, and 180 angles (the tests check 17, 45, and 180 angles).
+        30, 60, and 180 angles. The tests check 17, 45, and 180 angles,
+        odd and non-square image sizes, and unmasked k-space test vectors,
+        so they would also catch a missing mask or swapped FFT shifts.
   \item \emph{Operator norms.} Power iteration gives $\|A\|^2 = 1$ to six
         digits for both operators.
   \item \emph{Noise model.} Unsampled k-space locations are exactly zero,
@@ -309,7 +316,7 @@ differ slightly from implementations that use a Gaussian window.
         configuration of both examples and compares the PSNR and SSIM of
         every method with stored values (\code{tests/golden/quick\_examples.json}).
 \end{itemize}
-The test suite has 60 tests. Continuous integration runs it on Python 3.10
+The test suite has 69 tests. Continuous integration runs it on Python 3.10
 to 3.13, runs both examples in quick mode from outside the repository, and
 executes the tutorial.
 
@@ -322,11 +329,14 @@ executes the tutorial.
 The MRI example, \code{examples/01\_mri\_cs.py}, reconstructs the
 $256\times256$ Shepp--Logan phantom from 25\% variable-density sampling
 (4$\times$ acceleration) at a data SNR of 30\,dB. The CT example,
-\code{examples/02\_ct\_sparse\_view.py}, uses 45 parallel-beam views with Gaussian noise of 1\% of the sinogram RMS (40\,dB).
+\code{examples/02\_ct\_sparse\_view.py}, uses 45 parallel-beam views with
+Gaussian noise of 1\% of the sinogram RMS (40\,dB).
 The regularization parameters were chosen by a coarse search for the best
-PSNR on this phantom, so the results are best cases for it.
-Table~\ref{tab:examples} lists the metrics and Figures~\ref{fig:mri}
-and~\ref{fig:ct} show the images.
+PSNR on this phantom, so the results are best cases for it. Both examples
+also simulate the data with the same discrete operator that the solvers use
+(an \emph{inverse crime}), and the phantom is piecewise constant, which TV
+models exactly; measured data would give lower values.
+Table~\ref{tab:examples} lists the metrics.
 
 \begin{table}[ht]
 \centering
@@ -347,14 +357,21 @@ CT, 45 views, 1\% & 22.9 / 0.51 & 25.3 / 0.67 & 31.9 / 0.99 & 27.7 / 0.83 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[ht]
+Figure~\ref{fig:mri} shows the MRI reconstructions: TV removes the
+incoherent aliasing almost completely, while the Haar wavelets leave blocky
+artifacts.
+
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{01_mri_cs_comparison.png}
 \caption{MRI at 4$\times$ acceleration and 30\,dB SNR.}
 \label{fig:mri}
 \end{figure}
 
-\begin{figure}[ht]
+Figure~\ref{fig:ct} shows the CT reconstructions: FBP has the streaks
+typical of too few views, Tikhonov blurs them, and TV removes them.
+
+\begin{figure}[!htbp]
 \centering
 \includegraphics[width=\textwidth]{02_ct_sparse_view_comparison.png}
 \caption{Sparse-view CT from 45 views with 1\% noise.}
@@ -373,11 +390,12 @@ The tutorial adds three studies at $128\times128$:
         $3.2\times10^{-3}$ (37.5\,dB).
   \item \emph{Number of CT views.} With $\alpha$ retuned for each case, TV
         reaches 22.9, 27.3, 30.2, and 30.6\,dB with 15, 30, 60, and 120
-        views; the best $\alpha$ falls from $3\times10^{-3}$ to $10^{-4}$.
+        views; the best $\alpha$ falls from $3\times10^{-3}$ to $3\times10^{-5}$.
   \item \emph{A natural image.} On the \code{camera} image from
         scikit-image (MRI, same mask and noise), zero-filling gives 23.2\,dB,
         TV ($\alpha=3\times10^{-3}$) 30.2\,dB, and Haar CS
-        ($\lambda=3\times10^{-3}$) 27.1\,dB; db4 wavelets give about 24\,dB.
+        ($\lambda=3\times10^{-3}$) 27.1\,dB; db4 wavelets give 24 to 25\,dB, depending
+        on the level.
         The gain from TV is about 7\,dB, against 17\,dB on the piecewise
         constant phantom.
 \end{itemize}
@@ -415,9 +433,10 @@ image:
         and structural measures, which can disagree.
 \end{itemize}
 
-\paragraph{Iterations.} Chambolle--Pock has no stopping test: 500
-iterations suffice at $128\times128$ and 1000 to 2000 at $256\times256$ for
-the examples. FISTA usually stops earlier on its relative-change test; CG
+\paragraph{Iterations.} Chambolle--Pock has no stopping test. At
+$128\times128$, 500 iterations bring the MRI example within 0.3\,dB of its
+converged PSNR (37.4 against 37.7\,dB after 3000); the $256\times256$
+examples use 1000 to 2000. FISTA usually stops earlier on its relative-change test; CG
 needs at most a few hundred iterations.
 
 \paragraph{Your own operators.} Any pair \code{A}, \code{At} works. Run the
@@ -494,8 +513,8 @@ from any directory and accept \code{--quick}, \code{--outdir}, and
         beam hardening.
   \item \emph{Algorithms.} Chambolle--Pock runs a fixed number of
         iterations; the TV gradient uses periodic boundaries; the wavelet
-        transform is orthogonal only for orthogonal wavelets and image sides
-        divisible by $2^{\text{level}}$.
+        transform is orthogonal only for orthogonal wavelets, and image
+        sides must be divisible by $2^{\text{level}}$.
   \item \emph{Methods.} Classical variational methods only; no learned
         reconstruction and no GPU support.
 \end{itemize}
