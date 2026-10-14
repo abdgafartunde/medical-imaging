@@ -14,7 +14,7 @@
 The MRI measurement process in the ideal single-coil setting is the
 2-D Fourier transform sampled at discrete k-space locations.  Let
 $\mathcal{F}$ denote the unitary 2-D DFT.  With an under-sampling
-mask $M \in \{0, 1\}^{n_{\text{rows}} \times n_{\text{cols}}}$ and
+mask $M \in \lbrace 0, 1\rbrace^{n_{\text{rows}} \times n_{\text{cols}}}$ and
 complex Gaussian noise $\eta$ whose real and imaginary parts are
 independent $\mathcal{N}(0, \sigma^2)$, the forward model is
 
@@ -48,8 +48,8 @@ transform $\mathcal{R}$.  Let $\theta_j \in [0, \pi)$ be the projection
 angles and $s$ the detector coordinate.  Then
 
 $$A_{\text{CT}}(x)(\theta_j, s) = \mathcal{R}x(\theta_j, s)
-= \int_{-\infty}^{\infty} x(s \cos\theta_j - t \sin\theta_j,\;
-                          s \sin\theta_j + t \cos\theta_j)\, dt.$$
+= \int_{-\infty}^{\infty} x(s \cos\theta_j - t \sin\theta_j,\thickspace 
+             s \sin\theta_j + t \cos\theta_j)\thinspace dt.$$
 
 The adjoint $A_{\text{CT}}^* = \mathcal{R}^*$ is the unfiltered
 back-projection (not the FBP reconstruction, which applies a ramp
@@ -57,7 +57,7 @@ filter).  In `medimg`, $\mathcal{R}$ is discretised as a sparse matrix
 (pixel-driven, with linear interpolation onto unit-width detector bins)
 and the back-projection is its transpose, so the discrete pair is exactly
 adjoint.  The operator is divided by its largest singular value, so
-$\|A_{\text{CT}}\| = 1$.  For $N_\theta$ projection angles and $N_s$ detector bins,
+$\Vert A_{\text{CT}}\Vert = 1$.  For $N_\theta$ projection angles and $N_s$ detector bins,
 the sinogram has dimensions $N_\theta \times N_s$.  Sparse-view CT
 uses $N_\theta$ much smaller than the Nyquist criterion would demand,
 making the reconstruction problem under-determined.
@@ -77,10 +77,10 @@ linear measurements under two conditions:
 
 Under these conditions, the L1-regularised problem
 
-$$\min_x \frac12 \|A x - y\|_2^2 + \lambda \|\Psi x\|_1$$
+$$\min_x \frac12 \Vert A x - y\Vert_2^2 + \lambda \Vert \Psi x\Vert_1$$
 
-recovers the true image with high probability when $M \gtrsim
-s \log(N/s)$ measurements are acquired, where $s$ is the sparsity
+recovers the true image with high probability when
+$M \gtrsim s \log(N/s)$ measurements are acquired, where $s$ is the sparsity
 level.
 
 ## 3. Variational Reconstruction Methods
@@ -90,7 +90,7 @@ level.
 The simplest convex regulariser penalises the $\ell_2$ energy of
 the image:
 
-$$\min_x \frac12 \|A x - y\|_2^2 + \frac{\lambda}{2} \|x\|_2^2.$$
+$$\min_x \frac12 \Vert A x - y\Vert_2^2 + \frac{\lambda}{2} \Vert x\Vert_2^2.$$
 
 The solution satisfies the normal equation
 
@@ -104,7 +104,7 @@ reconstructions; it does not promote sparsity or preserve edges.
 
 The isotropic discrete total variation is
 
-$$\operatorname{TV}(x) = \|\nabla x\|_{2,1}
+$$\operatorname{TV}(x) = \Vert \nabla x\Vert_{2,1}
 = \sum_{i,j} \sqrt{(\nabla_1 x)_{i,j}^2 + (\nabla_2 x)_{i,j}^2},$$
 
 where $\nabla_1, \nabla_2$ are forward finite-difference operators
@@ -114,16 +114,16 @@ reconstructions with sharp edges.
 
 The reconstruction problem
 
-$$\min_x \frac12 \|A x - y\|_2^2 + \alpha \operatorname{TV}(x)$$
+$$\min_x \frac12 \Vert A x - y\Vert_2^2 + \alpha \operatorname{TV}(x)$$
 
 is solved via the **Chambolle-Pock primal-dual algorithm**
 (Chambolle & Pock 2011).  The saddle-point formulation is
 
-$$\min_x \max_{p:\,\|p\|_{2,\infty} \le \alpha}
-\frac12 \|A x - y\|_2^2 + \langle \nabla x, p \rangle,$$
+$$\min_x \max_{p:\thinspace \Vert p\Vert_{2,\infty} \le \alpha}
+\frac12 \Vert A x - y\Vert_2^2 + \langle \nabla x, p \rangle,$$
 
 where $p \in \mathbb{R}^{2 \times N}$ is the dual variable and the
-constraint $\|p_{i,j}\|_2 \le \alpha$ is enforced pointwise.  The
+constraint $\Vert p_{i,j}\Vert_2 \le \alpha$ is enforced pointwise.  The
 algorithm alternates:
 
 1. **Dual ascent:** $p^{k+1} = \Pi_\alpha(p^k + \sigma \nabla \bar{x}^k)$,
@@ -131,9 +131,9 @@ algorithm alternates:
 2. **Primal descent:** $x^{k+1} = x^k - \tau\big(A^*(A x^k - y) + \operatorname{div} p^{k+1}\big)$.
 3. **Over-relaxation:** $\bar{x}^{k+1} = x^{k+1} + \theta(x^{k+1} - x^k)$.
 
-Convergence is guaranteed when $\tau\sigma\|\nabla\|^2 < 1$ and
-$\tau\sigma\|A\|^2 < 1$.  With $\|\nabla\|^2 \le 8$, the step sizes
-$\tau = \sigma = 1/\sqrt{\|A\|^2 + 8}$ satisfy the condition.
+Convergence is guaranteed when $\tau\sigma\Vert \nabla\Vert^2 < 1$ and
+$\tau\sigma\Vert A\Vert^2 < 1$.  With $\Vert \nabla\Vert^2 \le 8$, the step sizes
+$\tau = \sigma = 1/\sqrt{\Vert A\Vert^2 + 8}$ satisfy the condition.
 
 ### 3.3 Wavelet-Domain L1 Minimisation (CS-FISTA)
 
@@ -141,11 +141,11 @@ Let $W: \mathbb{R}^N \to \mathbb{R}^K$ be a sparsifying wavelet
 transform (e.g., Daubechies-4 with 4 decomposition levels) and
 $W^*$ its adjoint (synthesis).  The CS objective is
 
-$$\min_x \frac12 \|A x - y\|_2^2 + \lambda \|W x\|_1.$$
+$$\min_x \frac12 \Vert A x - y\Vert_2^2 + \lambda \Vert W x\Vert_1.$$
 
 This is a composite convex problem $f(x) + g(x)$ with
-$f(x) = \frac12\|A x - y\|_2^2$ (smooth, gradient-Lipschitz with
-constant $L = \|A\|^2$) and $g(x) = \lambda\|W x\|_1$ (non-smooth,
+$f(x) = \frac12\Vert A x - y\Vert_2^2$ (smooth, gradient-Lipschitz with
+constant $L = \Vert A\Vert^2$) and $g(x) = \lambda\Vert W x\Vert_1$ (non-smooth,
 prox-friendly).  **FISTA** (Beck & Teboulle 2009) achieves the
 optimal $O(1/k^2)$ convergence rate:
 
@@ -168,7 +168,7 @@ normalisation it is also $L = 1$.
 
 $$\operatorname{PSNR}(x, x_{\text{ref}}) =
 20\log_{10}(\operatorname{range}) -
-10\log_{10}\!\left(\frac{1}{N}\|x - x_{\text{ref}}\|_2^2\right).$$
+10\log_{10}\negthinspace \left(\frac{1}{N}\Vert x - x_{\text{ref}}\Vert_2^2\right).$$
 
 **SSIM** (Structural Similarity, Wang et al. 2004):
 
