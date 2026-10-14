@@ -172,9 +172,10 @@ def main():
 
     # Save
     args.outdir.mkdir(parents=True, exist_ok=True)
-    out_path = args.outdir / "02_ct_sparse_view_comparison.pdf"
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
-    print(f"\nFigure saved to {out_path}")
+    for suffix in (".png", ".pdf"):
+        out_path = args.outdir / ("02_ct_sparse_view_comparison" + suffix)
+        fig.savefig(out_path, dpi=150, bbox_inches="tight")
+        print(f"Figure saved to {out_path}")
     if args.show:
         plt.show()
 

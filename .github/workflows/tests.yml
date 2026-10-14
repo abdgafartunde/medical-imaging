@@ -41,3 +41,16 @@ jobs:
         run: |
           python "$GITHUB_WORKSPACE/examples/01_mri_cs.py" --quick --outdir "$RUNNER_TEMP/figures"
           python "$GITHUB_WORKSPACE/examples/02_ct_sparse_view.py" --quick --outdir "$RUNNER_TEMP/figures"
+
+      - name: Execute the notebooks
+        if: matrix.python-version == '3.13'
+        run: |
+          python - <<'PY'
+          import nbformat
+          from nbclient import NotebookClient
+          for path in ["examples/00_getting_started.ipynb"]:
+              nb = nbformat.read(path, as_version=4)
+              NotebookClient(nb, timeout=900, kernel_name="python3",
+                             resources={"metadata": {"path": "examples"}}).execute()
+              print("executed", path)
+          PY

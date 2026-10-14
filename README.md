@@ -10,6 +10,14 @@ classical variational methods — Tikhonov, total variation, and
 wavelet-domain L1 minimisation — with clean operator-based abstractions
 that work across both imaging modalities.
 
+## Sample results
+
+![CS-MRI reconstructions at 4x acceleration](figures/01_mri_cs_comparison.png)
+
+![Sparse-view CT reconstructions from 45 views](figures/02_ct_sparse_view_comparison.png)
+
+Settings and how to regenerate the figures are in [`figures/`](figures/).
+
 ## Features
 
 | Module | Description |
@@ -86,6 +94,9 @@ parallel-beam projector whose geometry matches `skimage.transform.radon`
 
 ## Documentation
 
+- [examples/00_getting_started.ipynb](examples/00_getting_started.ipynb): the
+  tutorial, MRI and CT step by step, choosing parameters without the true
+  image, your own images, and writing your own operator. Start here.
 - [THEORY.md](THEORY.md) — Full mathematical formulation (forward models,
   compressed sensing principles, Tikhonov, TV/Chambolle-Pock, FISTA).
 - [examples/01_mri_cs.py](examples/01_mri_cs.py) — MRI compressed sensing
