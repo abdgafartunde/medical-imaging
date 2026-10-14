@@ -94,6 +94,9 @@ parallel-beam projector whose geometry matches `skimage.transform.radon`
 
 ## Documentation
 
+- [docs/medimg-tech-note.pdf](docs/medimg-tech-note.pdf): the technical note.
+  The operators and algorithms as implemented, verification, results,
+  parameter guidance, API reference, and limitations.
 - [examples/00_getting_started.ipynb](examples/00_getting_started.ipynb): the
   tutorial, MRI and CT step by step, choosing parameters without the true
   image, your own images, and writing your own operator. Start here.
