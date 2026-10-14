@@ -165,3 +165,90 @@ class TestCTForwardAdjoint:
             ang = np.linspace(0, np.pi, n_angles, endpoint=False)
             sino = ct_forward(img, ang)
             assert sino.shape[0] == n_angles
+
+
+# ---------------------------------------------------------------------------
+# Adjointness, operator norms, and the noise model
+# ---------------------------------------------------------------------------
+
+def _power_norm_sq(A, At, shape, n_iter=200, seed=0):
+    x = np.random.default_rng(seed).standard_normal(shape)
+    for _ in range(n_iter):
+        x = At(A(x))
+        x /= np.linalg.norm(x)
+    return float(np.linalg.norm(At(A(x))))
+
+
+class TestAdjointness:
+    """Dot-product tests: <A x, y> = <x, A* y> to rounding error."""
+
+    def test_mri_dot_product(self):
+        rng = np.random.default_rng(0)
+        mask = generate_cartesian_mask((64, 64), sampling_rate=0.3,
+                                       calib_lines=8, rng=1)
+        x = rng.standard_normal((64, 64))
+        y = (rng.standard_normal((64, 64))
+             + 1j * rng.standard_normal((64, 64))) * mask
+        lhs = np.real(np.vdot(mri_forward(x, mask), y))
+        rhs = np.vdot(x, mri_adjoint(y, mask))
+        assert lhs == pytest.approx(rhs, rel=1e-12)
+
+    @pytest.mark.parametrize("n_angles", [17, 45, 180])
+    def test_ct_dot_product(self, n_angles):
+        rng = np.random.default_rng(n_angles)
+        angles = np.linspace(0, np.pi, n_angles, endpoint=False)
+        x = rng.standard_normal((64, 64))
+        y = rng.standard_normal((n_angles, 64))
+        lhs = np.vdot(ct_forward(x, angles), y)
+        rhs = np.vdot(x, ct_adjoint(y, angles))
+        assert lhs == pytest.approx(rhs, rel=1e-12)
+
+    def test_mri_operator_norm_is_one(self):
+        mask = generate_cartesian_mask((64, 64), sampling_rate=0.3,
+                                       calib_lines=8, rng=1)
+        L = _power_norm_sq(lambda x: mri_forward(x, mask),
+                           lambda y: mri_adjoint(y, mask), (64, 64))
+        assert L == pytest.approx(1.0, rel=1e-6)
+
+    @pytest.mark.parametrize("n_angles", [17, 45])
+    def test_ct_operator_norm_is_one(self, n_angles):
+        angles = np.linspace(0, np.pi, n_angles, endpoint=False)
+        L = _power_norm_sq(lambda x: ct_forward(x, angles),
+                           lambda y: ct_adjoint(y, angles), (64, 64))
+        assert L == pytest.approx(1.0, rel=1e-6)
+
+    def test_ct_matches_skimage_radon(self):
+        from skimage.transform import radon
+        img = shepp_logan((128, 128))
+        angles = np.linspace(0, np.pi, 60, endpoint=False)
+        ours = ct_forward(img, angles, normalize=False)
+        ref = radon(img, theta=np.rad2deg(angles), circle=True).T
+        assert np.linalg.norm(ours - ref) / np.linalg.norm(ref) < 0.02
+
+    def test_ct_adjoint_rejects_mismatched_output_size(self):
+        angles = np.linspace(0, np.pi, 10, endpoint=False)
+        with pytest.raises(ValueError):
+            ct_adjoint(np.zeros((10, 64)), angles, output_size=128)
+
+
+class TestMRINoiseModel:
+    def test_noise_only_at_sampled_locations(self):
+        img = shepp_logan((64, 64))
+        mask = generate_cartesian_mask((64, 64), sampling_rate=0.3,
+                                       calib_lines=8, rng=1)
+        kspace = mri_forward(img, mask, noise_std=0.1, rng=2)
+        assert np.all(kspace[~mask] == 0.0)
+
+    def test_noise_level_matches_noise_std(self):
+        img = np.zeros((128, 128))
+        mask = generate_cartesian_mask((128, 128), sampling_rate=0.3,
+                                       calib_lines=12, rng=1)
+        noise = mri_forward(img, mask, noise_std=0.05, rng=3)[mask]
+        assert np.std(noise.real) == pytest.approx(0.05, rel=0.05)
+        assert np.std(noise.imag) == pytest.approx(0.05, rel=0.05)
+
+    def test_unitary_fft_preserves_norm(self):
+        img = shepp_logan((64, 64))
+        full = np.ones((64, 64), dtype=bool)
+        assert np.linalg.norm(mri_forward(img, full)) == pytest.approx(
+            np.linalg.norm(img), rel=1e-12)

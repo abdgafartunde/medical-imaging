@@ -232,3 +232,24 @@ class TestMetrics:
         b = np.random.rand(64, 64)
         s = ssim(a, b)
         assert -1.0 <= s <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# Real-valued data (CT)
+# ---------------------------------------------------------------------------
+
+def test_chambolle_pock_keeps_real_data_real():
+    """The dual variable follows the data dtype, so CT never sees complex input."""
+    import warnings
+    from medimg.forward import ct_adjoint, ct_forward
+
+    img = shepp_logan((64, 64))
+    angles = np.linspace(0, np.pi, 20, endpoint=False)
+    y = ct_forward(img, angles)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        x = tv_chambolle_pock(lambda v: ct_forward(v, angles),
+                              lambda w: ct_adjoint(w, angles), y,
+                              alpha=1e-3, shape=img.shape, max_iter=50, rng=0)
+    assert np.isrealobj(x)
+    assert psnr(x, img) > 20

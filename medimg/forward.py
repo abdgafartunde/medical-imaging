@@ -5,6 +5,11 @@ Provides the sensing models and their adjoints:
 - MRI:   Fourier encoding with variable-density Cartesian under-sampling.
 - CT:    Parallel-beam Radon transform with sparse angular sampling.
 
+Each adjoint is the exact adjoint of its forward operator, so the
+dot-product test <A x, y> = <x, A* y> holds to rounding error (see
+``tests/test_forward.py``).  With the default normalisation both
+operators have spectral norm 1.
+
 References
 ----------
 - Lustig, Donoho & Pauly (2007). Sparse MRI. *MRM*, 58(6), 1182–1195.
@@ -12,8 +17,12 @@ References
   constrained, total-variation minimization. *PMB*, 53(17), 4777–4807.
 """
 
+from functools import lru_cache
+
 import numpy as np
+import scipy.sparse as sp
 from numpy.fft import fft2, ifft2, fftshift, ifftshift
+from scipy.sparse.linalg import svds
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +101,10 @@ def generate_cartesian_mask(shape, sampling_rate=0.30, calib_lines=24,
 def mri_forward(image, mask, noise_std=0.0, rng=None):
     """MRI forward operator: 2-D FFT + k-space under-sampling + noise.
 
+    The FFT is unitary (``norm="ortho"``), so ``||F x|| = ||x||`` and
+    :func:`mri_adjoint` is the exact adjoint.  Noise is added only at
+    sampled k-space locations.
+
     Parameters
     ----------
     image : ndarray of shape (n_rows, n_cols)
@@ -99,7 +112,10 @@ def mri_forward(image, mask, noise_std=0.0, rng=None):
     mask : ndarray of bool, shape (n_rows, n_cols)
         k-space sampling mask.
     noise_std : float
-        Standard deviation of complex white Gaussian noise added in k-space.
+        Standard deviation of the real and of the imaginary part of the
+        complex white Gaussian noise added at each sampled k-space
+        location.  Because the FFT is unitary, it is on the same scale as
+        the image intensities.
     rng : int or numpy.random.Generator, optional
 
     Returns
@@ -113,19 +129,22 @@ def mri_forward(image, mask, noise_std=0.0, rng=None):
     elif rng is None:
         rng = np.random.default_rng()
 
-    k_full = fftshift(fft2(ifftshift(image)))
+    k_full = fftshift(fft2(ifftshift(image), norm="ortho"))
     kspace = k_full * mask
 
     if noise_std > 0:
         noise = (rng.normal(0, noise_std, kspace.shape)
                  + 1j * rng.normal(0, noise_std, kspace.shape))
-        kspace += noise
+        kspace += noise * mask
 
     return kspace
 
 
 def mri_adjoint(kspace, mask):
     """Adjoint MRI operator: masked inverse FFT (zero-filled reconstruction).
+
+    This is the exact adjoint of :func:`mri_forward` (without noise) for
+    real-valued images, with the real inner product on k-space.
 
     Parameters
     ----------
@@ -137,75 +156,119 @@ def mri_adjoint(kspace, mask):
     image : ndarray, shape (n_rows, n_cols)
         Real part of the zero-filled inverse Fourier transform.
     """
-    return np.real(fftshift(ifft2(ifftshift(kspace * mask))))
+    return np.real(fftshift(ifft2(ifftshift(kspace * mask), norm="ortho")))
 
 
 # ---------------------------------------------------------------------------
 # CT
 # ---------------------------------------------------------------------------
 
-# Theoretical spectral norm of the continuous Radon transform for
-# n_angles uniformly spaced over [0, π) is √(π · n_angles).
-# We normalise by this factor so that ‖A‖ ≈ 1, matching the MRI
-# scaling and making regularisation parameters transferable across
-# modalities.
-def _ct_norm_factor(n_angles):
-    """Normalisation constant for the Radon operator pair."""
-    return np.sqrt(np.pi * max(n_angles, 1))
+@lru_cache(maxsize=8)
+def _radon_operator(n, angles_key):
+    """Sparse parallel-beam projection matrix and its spectral norm.
+
+    Pixel-driven projector with linear interpolation onto ``n`` unit-width
+    detector bins, using the geometry of ``skimage.transform.radon`` with
+    ``circle=True``: only pixels inside the inscribed circle contribute,
+    and detector bin ``n // 2`` passes through the image centre.  The
+    back-projection is the matrix transpose, so the pair is exactly
+    adjoint.
+    """
+    angles = np.frombuffer(angles_key, dtype=np.float64)
+    c = n // 2
+    cols, rows = np.meshgrid(np.arange(n), np.arange(n))
+    inside = ((cols - (n - 1) / 2) ** 2 + (rows - (n - 1) / 2) ** 2
+              <= (n / 2) ** 2).ravel()
+    pixels = np.flatnonzero(inside)
+    x = (cols.ravel() - c)[pixels].astype(np.float64)
+    y = (c - rows.ravel())[pixels].astype(np.float64)
+
+    r_idx, c_idx, vals = [], [], []
+    for a, theta in enumerate(angles):
+        s = x * np.cos(theta) + y * np.sin(theta) + c
+        k0 = np.floor(s).astype(np.int64)
+        frac = s - k0
+        for k, w in ((k0, 1.0 - frac), (k0 + 1, frac)):
+            keep = (k >= 0) & (k < n) & (w > 0)
+            r_idx.append(a * n + k[keep])
+            c_idx.append(pixels[keep])
+            vals.append(w[keep])
+    R = sp.csr_matrix(
+        (np.concatenate(vals), (np.concatenate(r_idx), np.concatenate(c_idx))),
+        shape=(len(angles) * n, n * n),
+    )
+    sigma_max = svds(R, k=1, return_singular_vectors=False,
+                     v0=np.ones(min(R.shape)), tol=1e-8)[0]
+    return R, float(sigma_max)
+
+
+def _ct_operator(n, angles):
+    angles = np.ascontiguousarray(angles, dtype=np.float64)
+    return _radon_operator(int(n), angles.tobytes())
 
 
 def ct_forward(image, angles, normalize=True):
     """CT forward operator: parallel-beam Radon transform.
 
-    Uses ``skimage.transform.radon``.
+    Uses a sparse pixel-driven projector whose geometry matches
+    ``skimage.transform.radon(image, circle=True)``; pixels outside the
+    inscribed circle are ignored.
 
     Parameters
     ----------
-    image : ndarray of shape (n_rows, n_cols)
+    image : ndarray of shape (n, n)
     angles : ndarray
         Projection angles in radians.
     normalize : bool
-        If True (default), normalises by :math:`1/\\sqrt{\\pi n_\\theta}`
-        so that :math:`\\|A\\| \\approx 1`.
+        If True (default), divides by the spectral norm of the projector so
+        that :math:`\\|A\\| = 1`.  If False, returns line integrals in pixel
+        units (suitable for filtered back-projection).
 
     Returns
     -------
-    sinogram : ndarray of shape (n_angles, n_detectors)
+    sinogram : ndarray of shape (n_angles, n)
     """
-    from skimage.transform import radon
-    # skimage radon returns (n_detectors, n_angles); we standardise to
-    # (n_angles, n_detectors) for consistency.
-    sino = radon(image, theta=np.rad2deg(angles), circle=True).T
+    image = np.asarray(image, dtype=np.float64)
+    n = image.shape[0]
+    if image.shape != (n, n):
+        raise ValueError(f"image must be square, got shape {image.shape}")
+    R, sigma_max = _ct_operator(n, angles)
+    sino = (R @ image.ravel()).reshape(len(angles), n)
     if normalize:
-        sino = sino / _ct_norm_factor(len(angles))
+        sino = sino / sigma_max
     return sino
 
 
 def ct_adjoint(sinogram, angles, output_size=None, normalize=True):
     """Adjoint CT operator: unfiltered back-projection.
 
-    Uses ``skimage.transform.iradon`` with no ramp filter, which gives
-    the true adjoint of the Radon transform (not the FBP reconstruction).
+    The exact adjoint (matrix transpose) of :func:`ct_forward`; it is not
+    the filtered back-projection (FBP) reconstruction.
 
     Parameters
     ----------
-    sinogram : ndarray of shape (n_angles, n_detectors)
+    sinogram : ndarray of shape (n_angles, n)
         Radon sinogram (angles × detectors).
     angles : ndarray
         Projection angles in radians.
     output_size : int, optional
-        Side length of the reconstructed square image.
+        Side length of the image; must equal the number of detectors
+        ``n`` if given.
     normalize : bool
         Must match the setting used in ``ct_forward``.
 
     Returns
     -------
-    image : ndarray of shape (output_size, output_size)
+    image : ndarray of shape (n, n)
     """
-    from skimage.transform import iradon
-    # iradon expects (n_detectors, n_angles)
-    reco = iradon(sinogram.T, theta=np.rad2deg(angles),
-                  output_size=output_size, circle=True, filter_name=None)
+    sinogram = np.asarray(sinogram, dtype=np.float64)
+    n = sinogram.shape[1]
+    if output_size is not None and int(output_size) != n:
+        raise ValueError(
+            f"output_size={output_size} does not match the {n} detector bins"
+        )
+    R, sigma_max = _ct_operator(n, angles)
+    image = (R.T @ sinogram.ravel()).reshape(n, n)
     if normalize:
-        reco = reco / _ct_norm_factor(len(angles))
-    return reco
+        image = image / sigma_max
+    return image

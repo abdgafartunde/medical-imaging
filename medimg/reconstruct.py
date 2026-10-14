@@ -205,8 +205,8 @@ def tv_chambolle_pock(A, At, y, alpha, shape, L=None, max_iter=500,
     # Initialise
     x = np.zeros(shape, dtype=np.float64)
     x_bar = x.copy()
-    # Dual variables: p (data, complex), q (gradient, 2-channel real)
-    p_data = np.zeros_like(y, dtype=np.complex128)
+    # Dual variables: p (data; complex for MRI, real for CT), q (gradient, 2-channel real)
+    p_data = np.zeros(np.shape(y), dtype=np.result_type(y, np.float64))
     q_grad = np.zeros((2, n_rows, n_cols), dtype=np.float64)
 
     # Pre-compute ‖y‖² term for F^* proximal
