@@ -17,6 +17,13 @@ import pywt
 def wavelet_forward(x, wavelet='db4', level=4):
     """Forward 2-D discrete wavelet transform (analysis operator).
 
+    Uses periodic extension (``mode="periodization"``), so for an
+    orthogonal wavelet (``haar``, ``dbN``, ``symN``, ``coifN``) and image
+    sides divisible by ``2**level`` the transform is orthogonal:
+    ``||W x|| = ||x||`` and :func:`wavelet_adjoint` is both its inverse and
+    its adjoint.  This is what makes the soft-thresholding step in
+    :func:`medimg.reconstruct.cs_fista` the exact proximal map.
+
     Returns the PyWavelets coefficient structure (a list of numpy
     arrays) which can be passed directly to ``wavelet_adjoint`` or
     thresholded with ``soft_threshold_coeffs``.
@@ -39,13 +46,15 @@ def wavelet_forward(x, wavelet='db4', level=4):
         coefficients at each level (each a 3-tuple of (LH, HL, HH)
         sub-bands).
     """
-    return pywt.wavedec2(x, wavelet=wavelet, level=level)
+    return pywt.wavedec2(x, wavelet=wavelet, level=level, mode="periodization")
 
 
 def wavelet_adjoint(coeff_struct, wavelet='db4'):
     """Adjoint (inverse) 2-D discrete wavelet transform (synthesis).
 
-    Reconstructs an image from a PyWavelets coefficient structure.
+    Reconstructs an image from a PyWavelets coefficient structure, with
+    the same periodic extension as :func:`wavelet_forward`, so it is the
+    exact adjoint of that transform for orthogonal wavelets.
 
     Parameters
     ----------
@@ -60,7 +69,7 @@ def wavelet_adjoint(coeff_struct, wavelet='db4'):
     x : ndarray
         Reconstructed image.
     """
-    return pywt.waverec2(coeff_struct, wavelet=wavelet)
+    return pywt.waverec2(coeff_struct, wavelet=wavelet, mode="periodization")
 
 
 def soft_threshold(x, lambd):
